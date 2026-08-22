@@ -1,0 +1,49 @@
+name: Actualizar Tropela
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # GitHub usa UTC.
+    # Comprueba cada 30 minutos entre las 12:00 y las 23:30 UTC
+    # durante La Vuelta 2026.
+    - cron: '*/30 12-23 22-31 8 *'
+    - cron: '*/30 12-23 1-13 9 *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-tropela-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Consultar Tropela y actualizar latest.json
+        run: node scripts/update-tropela.mjs
+
+      - name: Guardar solo si hay cambios
+        shell: bash
+        run: |
+          if git diff --quiet -- latest.json; then
+            echo "No hay datos nuevos."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add latest.json
+          git commit -m "Actualizar datos Tropela"
+          git push

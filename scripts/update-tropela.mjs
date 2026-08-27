@@ -464,7 +464,7 @@ async function discoverVueltaRankingUrls(stageNo) {
     if (match) {
       found[key] =
         `${VUELTA_BASE}/es/ajax/ranking/` +
-        `${stageNo}/${code}/${match[1]}/subtab`;
+        `${stageNo}/${code}/${match[1]}/none`;
     }
   }
 

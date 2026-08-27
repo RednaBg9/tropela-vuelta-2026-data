@@ -2,15 +2,15 @@ import fs from 'node:fs';
 
 const DATA_FILE = process.env.DATA_FILE || 'latest.json';
 const API_BASE = process.env.TROPELA_API_BASE || 'https://api.tropela.eus/v2';
-const VUELTA_BASE = 'https://www.lavuelta.es/es/ajax/ranking';
+const VUELTA_BASE = 'https://www.lavuelta.es';
 const MIN_STAGE_RECORDS = Number(process.env.MIN_STAGE_RECORDS || 20);
 
 const VUELTA_RANKINGS = {
-  individual: ['itg', '9b090725bf332e0cb20022c0dbce7051'],
-  points: ['ipg', '6306411cc2a1d71e4fe456b8c4901833'],
-  mountain: ['img', 'a573376eba3b91559f263ac01f200f20'],
-  young: ['ijg', '81e8594fb566db72e8855bd9e5ffa6c7'],
-  teams: ['etg', '01ed036b2fee3e7766def79883126737']
+  individual: 'itg',
+  points: 'ipg',
+  mountain: 'img',
+  young: 'ijg',
+  teams: 'etg'
 };
 
 const read = () => JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -418,17 +418,97 @@ async function fetchStage(raceId, stageId) {
   return data;
 }
 
-async function fetchVueltaRanking(stageNo, key) {
-  const [code, hash] = VUELTA_RANKINGS[key];
+async function discoverVueltaRankingUrls(stageNo) {
+  const pageUrl =
+    `${VUELTA_BASE}/es/clasificaciones/etapa-${stageNo}`;
 
-  const url =
-    `${VUELTA_BASE}/${stageNo}/${code}/${hash}/subtab`;
+  const res = await fetch(pageUrl, {
+    headers: {
+      accept: 'text/html,application/xhtml+xml',
+      'user-agent':
+        'Mozilla/5.0 txami-galdakao-vuelta-2026-updater/3.0'
+    }
+  });
+
+  if (!res.ok) {
+    console.log(
+      `La Vuelta etapa ${stageNo}: ` +
+      `página de clasificaciones HTTP ${res.status}.`
+    );
+    return null;
+  }
+
+  let html = await res.text();
+
+  // Algunas URLs pueden aparecer escapadas dentro de JS/JSON.
+  html = html.replace(/\\\//g, '/');
+
+  const found = {};
+
+  for (const [key, code] of Object.entries(VUELTA_RANKINGS)) {
+    const re = new RegExp(
+      `(?:https?:\\\\/\\\\/www\\\\.lavuelta\\\\.es)?` +
+      `\\\\/es\\\\/ajax\\\\/ranking\\\\/${stageNo}\\\\/${code}` +
+      `\\\\/([a-f0-9]{32})\\\\/subtab`,
+      'i'
+    );
+
+    const match = html.match(re);
+
+    if (match) {
+      found[key] =
+        `${VUELTA_BASE}/es/ajax/ranking/` +
+        `${stageNo}/${code}/${match[1]}/subtab`;
+    }
+  }
+
+  const required = [
+    'individual',
+    'points',
+    'young',
+    'teams'
+  ];
+
+  const missing =
+    required.filter(key => !found[key]);
+
+  if (missing.length) {
+    console.log(
+      `La Vuelta etapa ${stageNo}: ` +
+      `no encontré URLs para ${missing.join(', ')}.`
+    );
+    return null;
+  }
+
+  console.log(
+    `La Vuelta etapa ${stageNo}: ` +
+    `URLs de clasificaciones descubiertas automáticamente.`
+  );
+
+  return found;
+}
+
+
+async function fetchVueltaRanking(
+  stageNo,
+  key,
+  urls
+) {
+  const url = urls?.[key];
+
+  if (!url) {
+    // Montaña puede no existir en alguna etapa.
+    return null;
+  }
 
   const res = await fetch(url, {
     headers: {
       accept: 'text/html, */*; q=0.01',
-      'user-agent': 'Mozilla/5.0 txami-galdakao-vuelta-2026-updater/2.0',
-      'x-requested-with': 'XMLHttpRequest'
+      'user-agent':
+        'Mozilla/5.0 txami-galdakao-vuelta-2026-updater/3.0',
+      'x-requested-with': 'XMLHttpRequest',
+      referer:
+        `${VUELTA_BASE}/es/clasificaciones/etapa-${stageNo}`
     }
   });
 
@@ -441,26 +521,38 @@ async function fetchVueltaRanking(stageNo, key) {
 
   if (!res.ok) {
     throw new Error(
-      `La Vuelta ${key} etapa ${stageNo}: HTTP ${res.status}`
+      `La Vuelta ${key} etapa ${stageNo}: ` +
+      `HTTP ${res.status}`
     );
   }
 
   return res.text();
 }
 
-async function fetchVueltaClassifications(stageNo) {
-  const entries = await Promise.all(
-    Object.keys(VUELTA_RANKINGS)
-      .map(async key => [
-        key,
-        await fetchVueltaRanking(
-          stageNo,
-          key
-        )
-      ])
-  );
 
-  const html = Object.fromEntries(entries);
+async function fetchVueltaClassifications(stageNo) {
+  const urls =
+    await discoverVueltaRankingUrls(stageNo);
+
+  if (!urls) {
+    return null;
+  }
+
+  const entries =
+    await Promise.all(
+      Object.keys(VUELTA_RANKINGS)
+        .map(async key => [
+          key,
+          await fetchVueltaRanking(
+            stageNo,
+            key,
+            urls
+          )
+        ])
+    );
+
+  const html =
+    Object.fromEntries(entries);
 
   if (
     !html.individual ||
@@ -496,8 +588,7 @@ async function fetchVueltaClassifications(stageNo) {
   ) {
     console.log(
       `La Vuelta etapa ${stageNo}: ` +
-      `HTML recibido, pero las clasificaciones ` +
-      `aún no parecen completas.`
+      `clasificaciones todavía incompletas.`
     );
 
     return null;

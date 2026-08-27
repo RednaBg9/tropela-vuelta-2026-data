@@ -426,7 +426,7 @@ async function discoverVueltaRankingUrls(stageNo) {
     headers: {
       accept: 'text/html,application/xhtml+xml',
       'user-agent':
-        'Mozilla/5.0 txami-galdakao-vuelta-2026-updater/3.0'
+        'Mozilla/5.0 txami-galdakao-vuelta-2026-updater/4.0'
     }
   });
 
@@ -440,16 +440,22 @@ async function discoverVueltaRankingUrls(stageNo) {
 
   let html = await res.text();
 
-  // Algunas URLs pueden aparecer escapadas dentro de JS/JSON.
-  html = html.replace(/\\\//g, '/');
+  // Las URLs están dentro de data-ajax-stack y vienen
+  // escapadas/codificadas en el HTML.
+  html = html
+    .replace(/\\\//g, '/')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#34;/gi, '"')
+    .replace(/&amp;/gi, '&');
 
   const found = {};
 
   for (const [key, code] of Object.entries(VUELTA_RANKINGS)) {
+
+    // En el HTML la URL suele acabar en /none.
+    // Nosotros construimos después la URL XHR /subtab.
     const re = new RegExp(
-      `(?:https?:\\\\/\\\\/www\\\\.lavuelta\\\\.es)?` +
-      `\\\\/es\\\\/ajax\\\\/ranking\\\\/${stageNo}\\\\/${code}` +
-      `\\\\/([a-f0-9]{32})\\\\/subtab`,
+      `/es/ajax/ranking/${stageNo}/${code}/([a-f0-9]{32})/(?:none|subtab)`,
       'i'
     );
 
@@ -461,6 +467,11 @@ async function discoverVueltaRankingUrls(stageNo) {
         `${stageNo}/${code}/${match[1]}/subtab`;
     }
   }
+
+  console.log(
+    `La Vuelta etapa ${stageNo}: encontradas →`,
+    Object.keys(found).join(', ')
+  );
 
   const required = [
     'individual',
@@ -475,15 +486,10 @@ async function discoverVueltaRankingUrls(stageNo) {
   if (missing.length) {
     console.log(
       `La Vuelta etapa ${stageNo}: ` +
-      `no encontré URLs para ${missing.join(', ')}.`
+      `faltan URLs para ${missing.join(', ')}.`
     );
     return null;
   }
-
-  console.log(
-    `La Vuelta etapa ${stageNo}: ` +
-    `URLs de clasificaciones descubiertas automáticamente.`
-  );
 
   return found;
 }

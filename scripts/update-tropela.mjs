@@ -969,36 +969,47 @@ function teamIdForOfficialTeam(
   individualRows,
   officialTeamName
 ) {
-  const wanted =
-    normalizeText(
-      officialTeamName
-    );
+  const wanted = normalizeText(officialTeamName);
 
   if (!wanted) {
     return null;
   }
 
+  const candidates = new Map();
+
   for (const row of individualRows) {
-    if (
-      normalizeText(row.team) !==
-      wanted
-    ) {
+    // La tabla de La Vuelta puede desplazar columnas.
+    // Buscamos el nombre del equipo en TODA la fila.
+    const cells = [
+      row.team,
+      ...(row.cells || [])
+    ]
+      .map(normalizeText)
+      .filter(Boolean);
+
+    if (!cells.includes(wanted)) {
       continue;
     }
 
-    const rider =
-      matchOfficialRider(
-        data,
-        row.name ||
-          row.shortName
-      );
+    const rider = matchOfficialRider(
+      data,
+      row.name || row.shortName
+    );
 
-    if (rider?.teamId) {
-      return rider.teamId;
+    if (!rider?.teamId) {
+      continue;
     }
+
+    candidates.set(
+      rider.teamId,
+      (candidates.get(rider.teamId) || 0) + 1
+    );
   }
 
-  return null;
+  const best = [...candidates.entries()]
+    .sort((a, b) => b[1] - a[1])[0];
+
+  return best?.[0] || null;
 }
 
 function sameJson(a, b) {
@@ -1191,6 +1202,32 @@ if (
 
 const race =
   await fetchRace(raceId);
+
+const raceStageMeta =
+  (race?.stages || [])
+    .filter(s => !s?.is_final)
+    .map((s, i) => ({
+      id: Number(s.id),
+      number: i + 1,
+      is_canceled: !!s.is_canceled,
+      has_standings: !!s.has_standings,
+      start: s.start || '',
+      finish: s.finish || '',
+      start_at: s.start_at || '',
+      end_at: s.end_at || ''
+    }));
+
+if (
+  !sameJson(
+    data.metadata.race_stages,
+    raceStageMeta
+  )
+) {
+  data.metadata.race_stages =
+    raceStageMeta;
+
+  changed = true;
+}
 
 const stages =
   raceStages(race);

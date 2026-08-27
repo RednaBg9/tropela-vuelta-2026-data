@@ -847,8 +847,13 @@ function stageNumberForId(
   race,
   stageId
 ) {
+  // Para traducir el ID de Tropela al número oficial de etapa
+  // debemos conservar también las etapas canceladas.
+  // Si las eliminamos, después de una cancelación todos los
+  // números de etapa quedan desplazados.
   const stages =
-    raceStages(race);
+    (race?.stages || [])
+      .filter(s => !s?.is_final);
 
   const idx =
     stages.findIndex(

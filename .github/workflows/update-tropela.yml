@@ -4,8 +4,10 @@ on:
   workflow_dispatch:
 
   schedule:
-  - cron: '*/30 * 22-31 8 *'
-  - cron: '*/30 * 1-14 9 *'
+  # GitHub usa UTC.
+  # Comprueba cada 15 minutos, evitando :00 y :30.
+  - cron: '7,22,37,52 12-23 22-31 8 *'
+  - cron: '7,22,37,52 12-23 1-13 9 *'
 
 permissions:
   contents: write

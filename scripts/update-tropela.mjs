@@ -1612,9 +1612,9 @@ function raceStagesForPoints(
       race?.stages ||
       []
     ).filter(
-      s =>
-        !s?.is_final &&
-        !s?.is_canceled
+      !s?.is_final &&
+      !s?.is_canceled &&
+      Number(s?.km) > 0
     );
 
   return stages.length

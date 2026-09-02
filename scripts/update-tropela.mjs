@@ -1604,27 +1604,20 @@ function reconcile(
 }
 
 
-function raceStagesForPoints(
-  race
-) {
+function raceStagesForPoints(race) {
   const stages =
-    (
-      race?.stages ||
-      []
-    ).filter(
-      !s?.is_final &&
-      !s?.is_canceled &&
-      Number(s?.km) > 0
-    );
+    (race?.stages || [])
+      .filter(
+        s =>
+          !s?.is_final &&
+          !s?.is_canceled &&
+          Number(s?.km) > 0
+      );
 
   return stages.length
     ? stages
-    : (
-        race?.stages ||
-        []
-      );
+    : (race?.stages || []);
 }
-
 
 function stageNumberForId(
   race,
